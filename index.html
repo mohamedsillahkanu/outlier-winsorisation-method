@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICF-SL Winsorization Outlier Detection & Correction</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #fff; font-family: 'Oswald', Arial, sans-serif; color: #000; font-weight: 500; padding: 20px; }
+        .page-container { width: 100%; max-width: 1400px; margin: 0 auto; }
+
+        .page-header {
+            background: #004080; color: #fff;
+            padding: 25px 30px; text-align: center;
+            margin-bottom: 15px; border-radius: 8px 8px 0 0;
+        }
+        .logo-row { display: flex; justify-content: center; align-items: center; gap: 30px; margin-bottom: 15px; }
+        .logo-box { background: #fff; border-radius: 8px; padding: 10px; display: flex; align-items: center; justify-content: center; }
+        .logo-text { font-size: 22px; font-weight: 700; color: #004080; letter-spacing: 2px; }
+        .page-header h3 { margin: 12px 0 5px; font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+        .page-header .tagline { font-size: 10px; font-weight: 500; }
+        .page-header h1 { margin: 20px 0 10px; font-size: 26px; font-weight: 700; letter-spacing: 1px; }
+        .page-header .subtitle { font-size: 14px; font-weight: 500; }
+
+        .content-card { border: 4px double #004080; border-radius: 12px; padding: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .content-inner { padding: 25px; }
+
+        .upload-section { background: #f8f9fa; padding: 2rem; border-radius: 8px; border: 2px dashed #004080; text-align: center; margin: 1.5rem 0; transition: all 0.3s; }
+        .upload-section:hover { border-color: #0056b3; background: #e7f3ff; }
+        .upload-section h3 { color: #004080; margin-bottom: 1rem; font-size: 18px; font-weight: 700; }
+        .upload-section p { font-weight: 500; font-size: 14px; }
+
+        .file-input-wrapper {
+            position: relative; display: inline-block; cursor: pointer;
+            background: #004080; color: #fff; padding: 14px 24px;
+            border-radius: 6px; border: 2px solid #004080; font-size: 14px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            font-family: 'Oswald', Arial, sans-serif; margin-top: 1rem; transition: all 0.3s;
+        }
+        .file-input-wrapper:hover { background: #0056b3; }
+        .file-input-wrapper input[type="file"] { position: absolute; left: -9999px; }
+
+        .section-header { background: #004080; color: #fff; padding: 15px 20px; margin-bottom: 20px; border-radius: 6px; display: flex; align-items: center; gap: 15px; }
+        .section-icon { background: #fff; color: #004080; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; }
+        .section-title { font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin: 1.5rem 0; }
+        .stats-card { background: #f8f9fa; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; border: 2px solid #004080; transition: all 0.2s; }
+        .stats-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,64,128,0.2); }
+        .stats-card h4 { color: #666; font-size: 11px; margin-bottom: 0.5rem; text-transform: uppercase; }
+        .stats-card .metric-value { font-size: 1.6rem; color: #004080; margin-bottom: 0.25rem; font-weight: 700; }
+        .stats-card p { color: #666; font-size: 11px; }
+        .stats-card.warning .metric-value { color: #dc3545; }
+        .stats-card.success .metric-value { color: #28a745; }
+        .stats-card.gold .metric-value { color: #856404; }
+
+        .btn { padding: 12px 22px; border: 2px solid #004080; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Oswald', Arial, sans-serif; transition: all 0.2s; margin: 5px; }
+        .btn-primary { background: #004080; color: #fff; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-secondary { background: #fff; color: #004080; }
+        .btn-secondary:hover { background: #004080; color: #fff; }
+        .btn-gold { background: #ffc107; color: #000; border-color: #ffc107; }
+        .btn-gold:hover { background: #e0a800; }
+        .btn-success { background: #28a745; color: #fff; border-color: #28a745; }
+        .btn-success:hover { background: #218838; }
+        .btn-danger { background: #dc3545; color: #fff; border-color: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-sm { padding: 6px 14px; font-size: 12px; margin: 2px; }
+
+        .alert { padding: 1rem; border-radius: 6px; margin: 1rem 0; font-weight: 500; }
+        .alert-success { background: #d4edda; border: 2px solid #28a745; color: #155724; }
+        .alert-error { background: #f8d7da; border: 2px solid #dc3545; color: #721c24; }
+        .alert-info { background: #e7f3ff; border: 2px solid #004080; color: #004080; }
+
+        .hidden { display: none !important; }
+
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 700; color: #004080; font-size: 14px; }
+        .form-control { width: 100%; padding: 0.75rem 1rem; border: 2px solid #004080; border-radius: 6px; font-size: 14px; background: #fff; color: #000; font-family: 'Oswald', Arial, sans-serif; font-weight: 500; }
+        .form-control:focus { outline: none; border-color: #0056b3; box-shadow: 0 0 0 3px rgba(0,64,128,0.1); }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; }
+
+        .config-card { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; border: 2px solid #004080; margin: 1rem 0; }
+        .config-card h4 { color: #004080; margin-bottom: 0.5rem; font-size: 16px; font-weight: 700; text-transform: uppercase; }
+        .config-card .sub { color: #666; font-size: 12px; margin-bottom: 1rem; }
+
+        .loading-spinner { border: 4px solid #e7f3ff; border-top: 4px solid #004080; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+
+        .col-select-box { background: #fff; border: 2px solid #004080; border-radius: 6px; max-height: 200px; overflow-y: auto; padding: 0.5rem; }
+        .col-select-box label { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; color: #000; font-weight: 500; transition: background 0.15s; }
+        .col-select-box label:hover { background: #e7f3ff; }
+        .col-select-box input[type="checkbox"] { accent-color: #004080; width: 15px; height: 15px; }
+        .num-tag { background: #004080; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: auto; }
+        .txt-tag { background: #6c757d; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: auto; }
+        .select-actions { display: flex; gap: 5px; margin-bottom: 0.5rem; flex-wrap: wrap; }
+
+        .tab-bar { display: flex; border-bottom: 3px solid #004080; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab-btn { padding: 10px 20px; background: #f8f9fa; border: 2px solid #004080; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; font-family: 'Oswald', Arial, sans-serif; font-weight: 700; font-size: 13px; color: #004080; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.2s; margin-right: 4px; margin-bottom: -3px; }
+        .tab-btn.active { background: #004080; color: #fff; }
+        .tab-btn:hover:not(.active) { background: #e7f3ff; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        .table-container { max-height: 520px; overflow: auto; border: 2px solid #004080; border-radius: 6px; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th { background: #004080; color: #fff; padding: 10px 12px; text-align: left; font-weight: 700; position: sticky; top: 0; white-space: nowrap; }
+        .data-table td { padding: 7px 12px; border-bottom: 1px solid #ddd; white-space: nowrap; }
+        .data-table tr:nth-child(even) { background: #f8f9fa; }
+        .data-table tr:hover { background: #e7f3ff; }
+        .data-table tr.out-row { background: #fff3cd !important; }
+        .data-table tr.out-row td { color: #856404; }
+
+        .formula-box { background: #fff3cd; border: 2px solid #ffc107; border-radius: 6px; padding: 1rem; margin: 1rem 0; font-size: 13px; }
+        .formula-box strong { color: #856404; }
+
+        .info-box { background: #e7f3ff; border: 2px solid #004080; border-radius: 6px; padding: 1rem; margin: 1rem 0; font-size: 13px; color: #004080; }
+        .warn-box { background: #fff3cd; border: 2px solid #ffc107; border-radius: 6px; padding: 0.75rem 1rem; font-size: 12px; color: #856404; margin: 0.5rem 0; }
+
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+        .badge-out { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
+        .badge-ok  { background: #d4edda; color: #155724; border: 1px solid #28a745; }
+        .badge-col { background: #e7f3ff; color: #004080; border: 1px solid #004080; }
+
+        .pbar-wrap { background: #e7f3ff; border-radius: 6px; overflow: hidden; height: 12px; width: 120px; display: inline-block; vertical-align: middle; }
+        .pbar-fill  { height: 100%; border-radius: 6px; transition: width 0.5s; }
+
+        /* Month grid in summary */
+        .month-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .month-cell {
+            width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700; border: 1px solid #ccc; cursor: default;
+        }
+        .month-cell.out  { background: #ffc107; color: #000; border-color: #e0a800; }
+        .month-cell.ok   { background: #d4edda; color: #155724; border-color: #28a745; }
+        .month-cell.none { background: #f8f9fa; color: #aaa; border-color: #ddd; }
+
+        .page-footer { background: #004080; color: #fff; padding: 20px 30px; text-align: center; font-size: 13px; line-height: 1.7; font-weight: 500; border-radius: 0 0 8px 8px; }
+        .page-footer p { margin: 6px 0 0; font-size: 12px; }
+
+        /* highlight cols */
+        .th-win  { background: #218838 !important; }
+        .th-cat  { background: #856404 !important; }
+        .th-bnd  { background: #555 !important; }
+    </style>
+</head>
+<body>
+<div class="page-container">
+
+<!-- HEADER -->
+<div class="page-header">
+    <div class="logo-row"><div class="logo-box"><span class="logo-text">ICF-SL</span></div></div>
+    <h3>INFORMATICS CONSULTANCY FIRM SIERRA LEONE</h3>
+    <p class="tagline">Health Informatics &amp; Data Consultancy</p>
+    <h1>📊 Winsorization Outlier Detection &amp; Correction</h1>
+    <p class="subtitle">IQR computed per Group × Year across Month 1–12 &nbsp;|&nbsp; Fully configurable variables &amp; groupings</p>
+</div>
+
+<div id="alertContainer"></div>
+
+<!-- UPLOAD -->
+<div class="content-card" id="uploadCard">
+    <div class="content-inner">
+        <div class="section-header">
+            <div class="section-icon">1</div>
+            <div><div class="section-title">Upload Data File</div><div style="font-size:12px;opacity:.85;">CSV or Excel (.xlsx / .xls)</div></div>
+        </div>
+        <div class="upload-section" id="dropZone">
+            <h3>📂 Upload Your Dataset</h3>
+            <p>Drag &amp; drop or click to browse</p>
+            <p style="margin-top:6px;font-size:12px;color:#666;">Supports CSV, XLSX, XLS</p>
+            <label class="file-input-wrapper">📁 Choose File
+                <input type="file" id="dataFileInput" accept=".csv,.xlsx,.xls" onchange="handleFileUpload(event)">
+            </label>
+            <div id="dataFileName" style="margin-top:10px;font-size:13px;color:#004080;font-weight:700;"></div>
+        </div>
+
+        <div class="formula-box">
+            <strong>📐 How IQR Winsorization works here:</strong><br><br>
+            For each <strong>Group × Year</strong> combination (e.g. each facility-year), all monthly values (month 1 – 12) form the distribution.<br>
+            IQR is computed across those monthly observations within that group-year.<br><br>
+            &nbsp;&nbsp;Q1 = 25th percentile of months &nbsp;|&nbsp; Q3 = 75th percentile &nbsp;|&nbsp; IQR = Q3 − Q1<br>
+            &nbsp;&nbsp;Lower Bound = Q1 − 1.5 × IQR &nbsp;|&nbsp; Upper Bound = Q3 + 1.5 × IQR<br><br>
+            Any monthly value outside [Lower, Upper] → flagged <strong>Outlier</strong> and clipped to the bound (winsorized).
+        </div>
+    </div>
+</div>
+
+<!-- CONFIG -->
+<div class="content-card hidden" id="configCard">
+    <div class="content-inner">
+        <div class="section-header">
+            <div class="section-icon">2</div>
+            <div><div class="section-title">Configure Groupings &amp; Variables</div><div style="font-size:12px;opacity:.85;">Select year column, entity group columns, and variables to winsorize</div></div>
+        </div>
+
+        <div class="stats-grid" id="fileStatsGrid"></div>
+
+        <!-- Year + Month columns -->
+        <div class="config-card">
+            <h4>🗓️ Step A — Year &amp; Month Columns</h4>
+            <p class="sub">IQR is computed across months within each Group × Year. Select the columns that identify year and month.</p>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Year Column <span style="color:#dc3545">*</span></label>
+                    <select class="form-control" id="yearCol"><option value="">-- Select Year Column --</option></select>
+                    <div class="warn-box" style="margin-top:8px;">⚠️ IQR bounds are computed <strong>independently per Group + Year</strong>. Each facility-year gets its own bounds from its 12 monthly values.</div>
+                </div>
+                <div class="form-group">
+                    <label>Month Column <span style="color:#dc3545">*</span></label>
+                    <select class="form-control" id="monthCol"><option value="">-- Select Month Column --</option></select>
+                    <p style="font-size:11px;color:#666;margin-top:4px;">Expected values: 1–12 (or Jan–Dec). Used for labelling only — all months in the group-year window are included.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Entity group cols + target cols -->
+        <div class="form-row">
+            <div class="config-card">
+                <h4>🗂️ Step B — Entity Group Columns</h4>
+                <p class="sub">E.g. adm1, adm2, adm3, hf. IQR computed per each unique combination + year.</p>
+                <div class="select-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="selectAll('groupCols')">Select All</button>
+                    <button class="btn btn-sm btn-secondary" onclick="clearAll('groupCols')">Clear All</button>
+                </div>
+                <div class="col-select-box" id="groupCols"></div>
+            </div>
+
+            <div class="config-card">
+                <h4>🎯 Step C — Variables to Winsorize</h4>
+                <p class="sub">Numeric columns only. IQR applied monthly within each group-year.</p>
+                <div class="select-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="selectAll('targetCols')">Select All</button>
+                    <button class="btn btn-sm btn-secondary" onclick="clearAll('targetCols')">Clear All</button>
+                </div>
+                <div class="col-select-box" id="targetCols"></div>
+            </div>
+        </div>
+
+        <!-- Output options -->
+        <div class="config-card">
+            <h4>⚙️ Step D — Output Options</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Output Columns</label>
+                    <select class="form-control" id="outputMode">
+                        <option value="full">All original columns + winsorization columns</option>
+                        <option value="group_target">Group + Year + Month + target + winsorization columns</option>
+                        <option value="win_only">Group + Year + Month + winsorized values only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Winsorized Column Suffix</label>
+                    <input type="text" class="form-control" id="winSuffix" value="_winsorized">
+                </div>
+                <div class="form-group">
+                    <label>Include Bound Columns?</label>
+                    <select class="form-control" id="inclBounds">
+                        <option value="yes">Yes — include _lower_bound &amp; _upper_bound</option>
+                        <option value="no">No — exclude bound columns</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align:center;margin-top:1.5rem;">
+            <button class="btn btn-primary" onclick="runWinsorization()">▶ Run Winsorization</button>
+            <button class="btn btn-secondary" onclick="resetAll()">↺ Reset</button>
+        </div>
+    </div>
+</div>
+
+<!-- PROCESSING -->
+<div class="content-card hidden" id="processingCard">
+    <div class="content-inner" style="text-align:center;padding:3rem;">
+        <div class="loading-spinner"></div>
+        <h3 style="color:#004080;margin-top:1rem;">Computing IQR bounds per Group × Year...</h3>
+        <p style="color:#666;font-size:13px;margin-top:.5rem;">Grouping monthly values, computing Q1/Q3/IQR, flagging &amp; correcting outliers</p>
+    </div>
+</div>
+
+<!-- RESULTS -->
+<div class="content-card hidden" id="resultsCard">
+    <div class="content-inner">
+        <div class="section-header">
+            <div class="section-icon">3</div>
+            <div><div class="section-title">Results</div><div style="font-size:12px;opacity:.85;" id="resultsSubtitle"></div></div>
+        </div>
+
+        <div class="stats-grid" id="resultStats"></div>
+
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="showTab('tabSummary',this)">📋 Variable Summary</button>
+            <button class="tab-btn" onclick="showTab('tabMonthly',this)">📅 Month-by-Month Breakdown</button>
+            <button class="tab-btn" onclick="showTab('tabPreview',this)">🔍 Data Preview</button>
+            <button class="tab-btn" onclick="showTab('tabOutliers',this)">⚠️ Outlier Rows</button>
+        </div>
+
+        <!-- Tab: Variable Summary -->
+        <div class="tab-pane active" id="tabSummary">
+            <div class="info-box" id="summaryInfo"></div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Variable</th>
+                            <th>Total Months</th>
+                            <th>Outlier Months</th>
+                            <th>Clean Months</th>
+                            <th>Outlier %</th>
+                            <th>Visual</th>
+                            <th>Groups × Years</th>
+                            <th>Min (original)</th>
+                            <th>Max (original)</th>
+                            <th>Mean (original)</th>
+                            <th>Mean (winsorized)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab: Month-by-Month Breakdown -->
+        <div class="tab-pane" id="tabMonthly">
+            <div class="info-box">Outlier counts per calendar month (Jan=1 … Dec=12) across all groups and years. Shows which months tend to be outlier-prone for each variable.</div>
+            <div id="monthBreakdown"></div>
+        </div>
+
+        <!-- Tab: Data Preview -->
+        <div class="tab-pane" id="tabPreview">
+            <p style="font-size:12px;color:#666;margin-bottom:10px;">First 200 rows. Highlighted rows contain ≥1 outlier month.</p>
+            <div class="table-container">
+                <table class="data-table" id="previewTable"></table>
+            </div>
+        </div>
+
+        <!-- Tab: Outlier Rows -->
+        <div class="tab-pane" id="tabOutliers">
+            <div id="outlierInfo" class="info-box"></div>
+            <div class="table-container">
+                <table class="data-table" id="outlierTable"></table>
+            </div>
+        </div>
+
+        <!-- Export -->
+        <div class="config-card" style="margin-top:1.5rem;text-align:center;">
+            <h4>📥 Export Results</h4>
+            <button class="btn btn-success" onclick="dlExcel('main')">⬇ Full Data (Excel)</button>
+            <button class="btn btn-gold" onclick="dlExcel('summary')">⬇ Variable Summary (Excel)</button>
+            <button class="btn btn-gold" onclick="dlExcel('monthly')">⬇ Monthly Breakdown (Excel)</button>
+            <button class="btn btn-secondary" onclick="dlCSV()">⬇ Full Data (CSV)</button>
+            <button class="btn btn-secondary" style="margin-top:8px;" onclick="backToConfig()">← Back to Config</button>
+            <button class="btn btn-danger" style="margin-top:8px;" onclick="resetAll()">↺ Reset All</button>
+        </div>
+    </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div id="confirmModal" class="hidden" style="
+    position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;
+    display:flex;align-items:center;justify-content:center;">
+    <div style="background:#fff;border:4px double #004080;border-radius:12px;padding:0;max-width:520px;width:94%;box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+        <div style="background:#004080;color:#fff;padding:18px 24px;border-radius:8px 8px 0 0;">
+            <div style="font-size:18px;font-weight:700;letter-spacing:.5px;">⚠️ Confirm Year &amp; Month Columns</div>
+            <div style="font-size:12px;opacity:.85;margin-top:4px;">Please verify before processing — IQR is computed per Group × Year across monthly values</div>
+        </div>
+        <div style="padding:24px;">
+            <div id="confirmDetails" style="margin-bottom:20px;"></div>
+            <div class="warn-box" style="margin-bottom:16px;">
+                ⚠️ <strong>Zero (0) values</strong> and <strong>null/missing values</strong> will <strong>not</strong> be corrected — they are kept as-is.<br>
+                ✅ <strong>Winsorized values</strong> are rounded to the nearest <strong>whole number</strong>.
+            </div>
+            <div style="text-align:center;">
+                <button class="btn btn-primary" onclick="confirmAndRun()">✅ Confirm &amp; Run</button>
+                <button class="btn btn-secondary" onclick="closeModal()">← Go Back &amp; Edit</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FOOTER -->
+<div class="page-footer">
+    <strong>INFORMATICS CONSULTANCY FIRM SIERRA LEONE (ICF-SL)</strong>
+    <p>Winsorization Outlier Detection &amp; Correction &nbsp;|&nbsp; IQR per Group × Year across Monthly Values</p>
+    <p>Health Informatics &amp; Data Quality Solutions &nbsp;|&nbsp; Sierra Leone</p>
+</div>
+
+</div><!-- /page-container -->
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let rawData = [], processedData = [], summaryData = [], monthlyBreakdown = {};
+let availableColumns = [], numericColumns = [];
+let fileName = '';
+let chosenGroupCols = [], chosenTargetCols = [];
+
+// ─── Drag-drop ────────────────────────────────────────────────────────────────
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.background = '#cce0ff'; });
+dz.addEventListener('dragleave', () => { dz.style.background = ''; });
+dz.addEventListener('drop', e => { e.preventDefault(); dz.style.background = ''; if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
+function handleFileUpload(e) { if (e.target.files[0]) processFile(e.target.files[0]); }
+
+function processFile(file) {
+    fileName = file.name;
+    document.getElementById('dataFileName').textContent = '📄 ' + fileName;
+    const ext = fileName.split('.').pop().toLowerCase();
+    if (ext === 'csv') {
+        Papa.parse(file, { header: true, dynamicTyping: true, skipEmptyLines: true,
+            complete: r => { rawData = r.data; setupConfig(); } });
+    } else if (ext === 'xlsx' || ext === 'xls') {
+        const reader = new FileReader();
+        reader.onload = e => {
+            const wb = XLSX.read(e.target.result, { type: 'binary' });
+            rawData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null });
+            setupConfig();
+        };
+        reader.readAsBinaryString(file);
+    } else {
+        showAlert('Unsupported format. Use CSV, XLSX, or XLS.', 'error');
+    }
+}
+
+// ─── Setup Config ─────────────────────────────────────────────────────────────
+function setupConfig() {
+    if (!rawData.length) { showAlert('File is empty.', 'error'); return; }
+    availableColumns = Object.keys(rawData[0]);
+    numericColumns = availableColumns.filter(col => {
+        const vals = rawData.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+        return vals.length > 0 && vals.every(v => !isNaN(Number(v)));
+    });
+
+    document.getElementById('fileStatsGrid').innerHTML = `
+        <div class="stats-card"><h4>Rows</h4><div class="metric-value">${rawData.length.toLocaleString()}</div><p>Records</p></div>
+        <div class="stats-card"><h4>Columns</h4><div class="metric-value">${availableColumns.length}</div><p>Total</p></div>
+        <div class="stats-card success"><h4>Numeric</h4><div class="metric-value">${numericColumns.length}</div><p>Numeric cols</p></div>
+        <div class="stats-card gold"><h4>Text</h4><div class="metric-value">${availableColumns.length - numericColumns.length}</div><p>Non-numeric</p></div>
+    `;
+
+    // Year/month dropdowns — all columns
+    ['yearCol','monthCol'].forEach(id => {
+        const s = document.getElementById(id);
+        const label = id === 'yearCol' ? '-- Select Year Column --' : '-- Select Month Column --';
+        s.innerHTML = `<option value="">${label}</option>` +
+            availableColumns.map(c => `<option value="${c}">${c}</option>`).join('');
+    });
+
+    // Group-by: all columns
+    document.getElementById('groupCols').innerHTML = availableColumns.map(col => {
+        const isN = numericColumns.includes(col);
+        return `<label><input type="checkbox" value="${col}" class="grp-cb"> ${col}
+            <span class="${isN ? 'num-tag' : 'txt-tag'}">${isN ? 'NUM' : 'TEXT'}</span></label>`;
+    }).join('');
+
+    // Targets: numeric only, all checked
+    document.getElementById('targetCols').innerHTML = numericColumns.map(col =>
+        `<label><input type="checkbox" value="${col}" class="tgt-cb" checked> ${col}
+            <span class="num-tag">NUM</span></label>`
+    ).join('');
+
+    document.getElementById('uploadCard').classList.add('hidden');
+    document.getElementById('configCard').classList.remove('hidden');
+}
+
+function selectAll(id) { document.querySelectorAll(`#${id} input[type=checkbox]`).forEach(c => c.checked = true); }
+function clearAll(id)  { document.querySelectorAll(`#${id} input[type=checkbox]`).forEach(c => c.checked = false); }
+
+// ─── Run ──────────────────────────────────────────────────────────────────────
+function runWinsorization() {
+    const yearCol  = document.getElementById('yearCol').value;
+    const monthCol = document.getElementById('monthCol').value;
+    if (!yearCol)  { showAlert('Please select a Year column.', 'error'); return; }
+    if (!monthCol) { showAlert('Please select a Month column.', 'error'); return; }
+
+    chosenGroupCols  = [...document.querySelectorAll('.grp-cb:checked')].map(c => c.value);
+    chosenTargetCols = [...document.querySelectorAll('.tgt-cb:checked')].map(c => c.value);
+    if (!chosenTargetCols.length) { showAlert('Select at least one variable.', 'error'); return; }
+
+    // Peek at unique year & month values for user confirmation
+    const uniqueYears  = [...new Set(rawData.map(r => r[yearCol]).filter(v => v !== null && v !== undefined))].sort();
+    const rawMonths    = rawData.map(r => r[monthCol]);
+    const uniqueMonths = [...new Set(rawMonths.map(v => normalizeMonth(v)).filter(v => v !== null))].sort((a,b)=>a-b);
+
+    document.getElementById('confirmDetails').innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr style="background:#f8f9fa;">
+                <td style="padding:10px 14px;border:2px solid #004080;font-weight:700;color:#004080;width:38%;">📅 Year Column</td>
+                <td style="padding:10px 14px;border:2px solid #004080;"><strong>${yearCol}</strong>
+                    <div style="margin-top:4px;font-size:11px;color:#666;">Unique years found: <span style="color:#004080;font-weight:700;">${uniqueYears.join(', ')}</span></div>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding:10px 14px;border:2px solid #004080;font-weight:700;color:#004080;">📆 Month Column</td>
+                <td style="padding:10px 14px;border:2px solid #004080;"><strong>${monthCol}</strong>
+                    <div style="margin-top:4px;font-size:11px;color:#666;">Unique months found: <span style="color:#004080;font-weight:700;">${uniqueMonths.join(', ')}</span></div>
+                </td>
+            </tr>
+            <tr style="background:#f8f9fa;">
+                <td style="padding:10px 14px;border:2px solid #004080;font-weight:700;color:#004080;">🗂️ Entity Groups</td>
+                <td style="padding:10px 14px;border:2px solid #004080;">${chosenGroupCols.length ? chosenGroupCols.map(c=>`<span class="badge badge-col">${c}</span>`).join(' ') : '<span style="color:#666;">(none)</span>'}</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 14px;border:2px solid #004080;font-weight:700;color:#004080;">🎯 Variables</td>
+                <td style="padding:10px 14px;border:2px solid #004080;">${chosenTargetCols.map(c=>`<span class="badge badge-col">${c}</span>`).join(' ')}</td>
+            </tr>
+            <tr style="background:#f8f9fa;">
+                <td style="padding:10px 14px;border:2px solid #004080;font-weight:700;color:#004080;">📊 IQR Grouping</td>
+                <td style="padding:10px 14px;border:2px solid #004080;font-size:12px;">Per <strong>[${[...chosenGroupCols, yearCol].join(' + ')}]</strong> — monthly values in each group-year form the distribution</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 14px;border:2px solid #004080;font-weight:700;color:#004080;">📝 Total Rows</td>
+                <td style="padding:10px 14px;border:2px solid #004080;"><strong>${rawData.length.toLocaleString()}</strong> records</td>
+            </tr>
+        </table>`;
+
+    document.getElementById('confirmModal').classList.remove('hidden');
+    document.getElementById('confirmModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('confirmModal').classList.add('hidden');
+    document.getElementById('confirmModal').style.display = 'none';
+}
+
+function confirmAndRun() {
+    closeModal();
+    const yearCol  = document.getElementById('yearCol').value;
+    const monthCol = document.getElementById('monthCol').value;
+
+    document.getElementById('configCard').classList.add('hidden');
+    document.getElementById('processingCard').classList.remove('hidden');
+
+    setTimeout(() => {
+        try {
+            doWinsorization(yearCol, monthCol);
+            document.getElementById('processingCard').classList.add('hidden');
+            document.getElementById('resultsCard').classList.remove('hidden');
+            showAlert(`✅ Done — ${chosenTargetCols.length} variable(s) processed across ${rawData.length.toLocaleString()} rows.`, 'success');
+        } catch(err) {
+            document.getElementById('processingCard').classList.add('hidden');
+            document.getElementById('configCard').classList.remove('hidden');
+            showAlert('Error: ' + err.message, 'error');
+        }
+    }, 400);
+}
+
+// ─── Core Algorithm ───────────────────────────────────────────────────────────
+function doWinsorization(yearCol, monthCol) {
+    const suffix      = document.getElementById('winSuffix').value || '_winsorized';
+    const inclBounds  = document.getElementById('inclBounds').value === 'yes';
+
+    // Deep copy
+    processedData = rawData.map(r => Object.assign({}, r));
+
+    // Build groups keyed by [entity group cols + year]
+    // Each group contains all row indices belonging to that entity-year
+    const groupMap = {}; // key → [indices]
+    processedData.forEach((row, idx) => {
+        const entityPart = chosenGroupCols.length
+            ? chosenGroupCols.map(c => (row[c] !== null && row[c] !== undefined ? String(row[c]) : '__NULL__')).join('|||')
+            : '__ALL__';
+        const yearPart = row[yearCol] !== null && row[yearCol] !== undefined ? String(row[yearCol]) : '__NULL__';
+        const key = entityPart + '::YEAR::' + yearPart;
+        if (!groupMap[key]) groupMap[key] = [];
+        groupMap[key].push(idx);
+    });
+
+    // Init summary per variable
+    summaryData = chosenTargetCols.map(col => ({
+        col, total: 0, outliers: 0, nonOutliers: 0,
+        origVals: [], winVals: [], groupYearCount: 0,
+        monthCounts: {}  // month → { out, ok }
+    }));
+
+    // Init monthly breakdown
+    monthlyBreakdown = {};
+    for (const col of chosenTargetCols) {
+        monthlyBreakdown[col] = {}; // month → { out, ok }
+    }
+
+    // Process each group-year
+    for (const [, idxList] of Object.entries(groupMap)) {
+        for (const colIdx of summaryData) {
+            const col = colIdx.col;
+            colIdx.groupYearCount++;
+        }
+
+        for (const col of chosenTargetCols) {
+            // Collect all valid monthly values for this group-year
+            const vals = idxList
+                .map(i => Number(processedData[i][col]))
+                .filter(v => !isNaN(v));
+
+            if (vals.length === 0) {
+                // No valid data — skip marking
+                idxList.forEach(i => {
+                    processedData[i][`${col}_category`]   = '';
+                    processedData[i][`${col}${suffix}`]   = null;
+                    if (inclBounds) {
+                        processedData[i][`${col}_lower_bound`] = null;
+                        processedData[i][`${col}_upper_bound`] = null;
+                    }
+                });
+                continue;
+            }
+
+            // IQR across the monthly values in this group-year
+            const sorted = [...vals].sort((a, b) => a - b);
+            const q1    = pctile(sorted, 0.25);
+            const q3    = pctile(sorted, 0.75);
+            const iqr   = q3 - q1;
+            const lower = q1 - 1.5 * iqr;
+            const upper = q3 + 1.5 * iqr;
+
+            // Apply to each row in group
+            idxList.forEach(i => {
+                const v = Number(processedData[i][col]);
+                const monthVal = processedData[i][monthCol];
+
+                // Skip if value is null/undefined/NaN or exactly 0
+                if (isNaN(v) || v === null || v === undefined) {
+                    processedData[i][`${col}_category`]   = '';
+                    processedData[i][`${col}${suffix}`]   = null;
+                    if (inclBounds) {
+                        processedData[i][`${col}_lower_bound`] = fmtN(lower);
+                        processedData[i][`${col}_upper_bound`] = fmtN(upper);
+                    }
+                    return;
+                }
+
+                if (v === 0) {
+                    // Keep 0 as-is — do not flag, do not correct
+                    processedData[i][`${col}_category`]   = 'Non-Outlier';
+                    processedData[i][`${col}${suffix}`]   = 0;
+                    if (inclBounds) {
+                        processedData[i][`${col}_lower_bound`] = fmtN(lower);
+                        processedData[i][`${col}_upper_bound`] = fmtN(upper);
+                    }
+                    return;
+                }
+
+                const isOut  = v < lower || v > upper;
+                // Winsorized = clipped to bound, rounded to nearest whole number
+                const winVal = Math.round(Math.min(Math.max(v, lower), upper));
+
+                processedData[i][`${col}_category`]   = isOut ? 'Outlier' : 'Non-Outlier';
+                processedData[i][`${col}${suffix}`]   = winVal;  // whole number
+                if (inclBounds) {
+                    processedData[i][`${col}_lower_bound`] = fmtN(lower);
+                    processedData[i][`${col}_upper_bound`] = fmtN(upper);
+                }
+
+                // Accumulate summary
+                const s = summaryData.find(x => x.col === col);
+                s.total++;
+                if (isOut) s.outliers++; else s.nonOutliers++;
+                s.origVals.push(v);
+                s.winVals.push(winVal);
+
+                // Monthly breakdown — normalise to integer 1–12 so "1","01","Jan" all merge
+                const mNum = normalizeMonth(monthVal);
+                const mKey = mNum !== null ? String(mNum) : 'Unknown';
+                if (!monthlyBreakdown[col][mKey]) monthlyBreakdown[col][mKey] = { out: 0, ok: 0 };
+                if (isOut) monthlyBreakdown[col][mKey].out++;
+                else        monthlyBreakdown[col][mKey].ok++;
+            });
+        }
+    }
+
+    // Fix groupYearCount (we incremented per col above, divide)
+    summaryData.forEach(s => { s.groupYearCount = s.groupYearCount / chosenTargetCols.length || 1; });
+    // Actually recount properly
+    summaryData.forEach(s => { s.groupYearCount = Object.keys(groupMap).length; });
+
+    buildResults(yearCol, monthCol, suffix, inclBounds);
+}
+
+function pctile(sorted, p) {
+    if (!sorted.length) return 0;
+    const idx = p * (sorted.length - 1);
+    const lo = Math.floor(idx), hi = Math.ceil(idx);
+    return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+function fmtN(v) { return parseFloat(v.toFixed(4)); }
+
+// Converts ANY month representation → integer 1–12, or null if unrecognised
+// Handles: 1, 01, "1", "01", "Jan", "January", "jan", "JAN", "JANUARY" etc.
+function normalizeMonth(val) {
+    if (val === null || val === undefined || val === '') return null;
+    const MAP = {
+        jan:1,january:1,feb:2,february:2,mar:3,march:3,
+        apr:4,april:4,may:5,jun:6,june:6,
+        jul:7,july:7,aug:8,august:8,sep:9,sept:9,september:9,
+        oct:10,october:10,nov:11,november:11,dec:12,december:12
+    };
+    const s = String(val).trim().toLowerCase();
+    if (MAP[s] !== undefined) return MAP[s];
+    const n = parseInt(s, 10);
+    if (!isNaN(n) && n >= 1 && n <= 12) return n;
+    return null;
+}
+
+// ─── Build Result UI ──────────────────────────────────────────────────────────
+function buildResults(yearCol, monthCol, suffix, inclBounds) {
+    const totalOut     = summaryData.reduce((s, d) => s + d.outliers, 0);
+    const totalAll     = summaryData.reduce((s, d) => s + d.total, 0);
+    const outPct       = totalAll > 0 ? ((totalOut / totalAll) * 100).toFixed(1) : '0.0';
+    const outlierRows  = processedData.filter(r => chosenTargetCols.some(c => r[`${c}_category`] === 'Outlier')).length;
+
+    document.getElementById('resultsSubtitle').textContent =
+        `IQR per Group × Year · Grouped by: ${chosenGroupCols.join(', ') || '(none)'} + ${yearCol} · Month column: ${monthCol}`;
+
+    document.getElementById('resultStats').innerHTML = `
+        <div class="stats-card"><h4>Total Rows</h4><div class="metric-value">${rawData.length.toLocaleString()}</div><p>Processed</p></div>
+        <div class="stats-card"><h4>Variables</h4><div class="metric-value">${chosenTargetCols.length}</div><p>Winsorized</p></div>
+        <div class="stats-card warning"><h4>Outlier Cells</h4><div class="metric-value">${totalOut.toLocaleString()}</div><p>${outPct}% of month-cells</p></div>
+        <div class="stats-card warning"><h4>Outlier Rows</h4><div class="metric-value">${outlierRows.toLocaleString()}</div><p>Rows with ≥1 outlier</p></div>
+        <div class="stats-card success"><h4>Clean Cells</h4><div class="metric-value">${(totalAll - totalOut).toLocaleString()}</div><p>Non-outlier</p></div>
+        <div class="stats-card gold"><h4>Group-Years</h4><div class="metric-value">${summaryData[0]?.groupYearCount.toLocaleString() || '–'}</div><p>Unique groups × years</p></div>
+    `;
+
+    document.getElementById('summaryInfo').textContent =
+        `Each variable's IQR was computed per entity-group + year (across monthly values 1–12). Outlier = value outside Q1−1.5×IQR or Q3+1.5×IQR. Winsorized value = clipped to bound.`;
+
+    // Variable summary table
+    document.getElementById('summaryBody').innerHTML = summaryData.map(s => {
+        const pct = s.total > 0 ? ((s.outliers / s.total) * 100).toFixed(2) : '0.00';
+        const pN  = parseFloat(pct);
+        const clr = pN > 10 ? '#dc3545' : pN > 5 ? '#e0a800' : '#28a745';
+        const mOrig = s.origVals.length ? (s.origVals.reduce((a,b)=>a+b,0)/s.origVals.length).toFixed(3) : 'N/A';
+        const mWin  = s.winVals.length  ? (s.winVals.reduce((a,b)=>a+b,0)/s.winVals.length).toFixed(3) : 'N/A';
+        const minV  = s.origVals.length ? Math.min(...s.origVals).toFixed(3) : 'N/A';
+        const maxV  = s.origVals.length ? Math.max(...s.origVals).toFixed(3) : 'N/A';
+        return `<tr>
+            <td><span class="badge badge-col">${s.col}</span></td>
+            <td>${s.total.toLocaleString()}</td>
+            <td><span class="badge badge-out">${s.outliers.toLocaleString()}</span></td>
+            <td><span class="badge badge-ok">${s.nonOutliers.toLocaleString()}</span></td>
+            <td style="color:${clr};font-weight:700;">${pct}%</td>
+            <td><div class="pbar-wrap"><div class="pbar-fill" style="width:${Math.min(pN,100)}%;background:${clr};"></div></div>
+                <span style="font-size:11px;margin-left:4px;">${pct}%</span></td>
+            <td>${s.groupYearCount.toLocaleString()}</td>
+            <td>${minV}</td><td>${maxV}</td><td>${mOrig}</td><td>${mWin}</td>
+        </tr>`;
+    }).join('');
+
+    // Monthly breakdown
+    buildMonthlyBreakdown();
+
+    // Data preview & outlier tab
+    const mode   = document.getElementById('outputMode').value;
+    const cols   = getOutputCols(suffix, inclBounds, mode, yearCol, monthCol);
+    buildPreview(cols, suffix);
+    buildOutlierTab(cols, suffix);
+}
+
+// Month-by-month breakdown tab
+function buildMonthlyBreakdown() {
+    const MNAMES = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+
+    let html = '';
+    for (const col of chosenTargetCols) {
+        const mb = monthlyBreakdown[col] || {};
+        html += `<div class="config-card" style="margin-bottom:16px;">
+            <h4><span class="badge badge-col" style="font-size:14px;">${col}</span></h4>
+            <p class="sub">Outlier and clean counts per calendar month across all groups and years.</p>
+            <div class="table-container" style="max-height:none;">
+            <table class="data-table">
+                <thead><tr>
+                    <th>#</th><th>Month</th>
+                    <th>Outlier Rows</th><th>Clean Rows</th>
+                    <th>Total</th><th>Outlier %</th><th>Visual</th>
+                </tr></thead>
+                <tbody>`;
+
+        for (let m = 1; m <= 12; m++) {
+            const d   = mb[String(m)] || { out: 0, ok: 0 };
+            const tot = d.out + d.ok;
+            const pct = tot > 0 ? ((d.out / tot) * 100).toFixed(1) : '0.0';
+            const pN  = parseFloat(pct);
+            const clr = pN > 10 ? '#dc3545' : pN > 5 ? '#e0a800' : '#28a745';
+            html += `<tr>
+                <td>${m}</td>
+                <td><strong>${MNAMES[m-1]}</strong></td>
+                <td><span class="badge badge-out">${d.out.toLocaleString()}</span></td>
+                <td><span class="badge badge-ok">${d.ok.toLocaleString()}</span></td>
+                <td>${tot.toLocaleString()}</td>
+                <td style="color:${clr};font-weight:700;">${pct}%</td>
+                <td><div class="pbar-wrap"><div class="pbar-fill" style="width:${Math.min(pN,100)}%;background:${clr};"></div></div>
+                    <span style="font-size:11px;margin-left:4px;">${pct}%</span></td>
+            </tr>`;
+        }
+
+        html += `</tbody></table></div></div>`;
+    }
+    document.getElementById('monthBreakdown').innerHTML = html;
+}
+
+function getOutputCols(suffix, inclBounds, mode, yearCol, monthCol) {
+    const winCols = [];
+    for (const col of chosenTargetCols) {
+        winCols.push(`${col}_category`);
+        if (inclBounds) {
+            winCols.push(`${col}_lower_bound`);
+            winCols.push(`${col}_upper_bound`);
+        }
+        winCols.push(`${col}${suffix}`);
+    }
+    if (mode === 'full') return [...availableColumns, ...winCols];
+    const base = [...new Set([...chosenGroupCols, yearCol, monthCol, ...chosenTargetCols])];
+    if (mode === 'group_target') return [...base, ...winCols];
+    // win_only
+    const corrOnly = chosenTargetCols.map(c => `${c}${suffix}`);
+    return [...new Set([...chosenGroupCols, yearCol, monthCol, ...corrOnly])];
+}
+
+function buildPreview(cols, suffix) {
+    const rows = processedData.slice(0, 200);
+    let h = '<thead><tr><th>#</th>';
+    cols.forEach(col => {
+        const cls = col.endsWith(suffix) ? 'th-win' : col.endsWith('_category') ? 'th-cat' :
+                    (col.endsWith('_lower_bound') || col.endsWith('_upper_bound')) ? 'th-bnd' : '';
+        h += `<th class="${cls}">${col}</th>`;
+    });
+    h += '</tr></thead><tbody>';
+    rows.forEach((row, i) => {
+        const hasOut = chosenTargetCols.some(c => row[`${c}_category`] === 'Outlier');
+        h += `<tr class="${hasOut ? 'out-row' : ''}"><td>${i+1}</td>`;
+        cols.forEach(col => {
+            const v = row[col]; const d = (v !== null && v !== undefined) ? v : '';
+            const isCat = col.endsWith('_category');
+            const style = isCat && d === 'Outlier' ? 'color:#856404;font-weight:700;' :
+                          isCat && d === 'Non-Outlier' ? 'color:#155724;' : '';
+            h += `<td style="${style}">${d}</td>`;
+        });
+        h += '</tr>';
+    });
+    if (processedData.length > 200)
+        h += `<tr><td colspan="${cols.length+1}" style="text-align:center;color:#666;font-style:italic;">… and ${processedData.length-200} more rows</td></tr>`;
+    h += '</tbody>';
+    document.getElementById('previewTable').innerHTML = h;
+}
+
+function buildOutlierTab(cols, suffix) {
+    const outRows = processedData.filter(r => chosenTargetCols.some(c => r[`${c}_category`] === 'Outlier'));
+    document.getElementById('outlierInfo').textContent =
+        `${outRows.length.toLocaleString()} rows contain at least one outlier value. Showing up to 500.`;
+    const display = outRows.slice(0, 500);
+    let h = '<thead><tr><th>#</th>';
+    cols.forEach(col => {
+        const cls = col.endsWith(suffix) ? 'th-win' : col.endsWith('_category') ? 'th-cat' :
+                    (col.endsWith('_lower_bound') || col.endsWith('_upper_bound')) ? 'th-bnd' : '';
+        h += `<th class="${cls}">${col}</th>`;
+    });
+    h += '</tr></thead><tbody>';
+    display.forEach((row, i) => {
+        h += `<tr class="out-row"><td>${i+1}</td>`;
+        cols.forEach(col => {
+            const v = row[col]; const d = (v !== null && v !== undefined) ? v : '';
+            const isCat = col.endsWith('_category');
+            const style = isCat && d === 'Outlier' ? 'color:#856404;font-weight:700;' : '';
+            h += `<td style="${style}">${d}</td>`;
+        });
+        h += '</tr>';
+    });
+    h += '</tbody>';
+    document.getElementById('outlierTable').innerHTML = h;
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+function dlExcel(type) {
+    if (type === 'main') {
+        const suffix   = document.getElementById('winSuffix').value || '_winsorized';
+        const inclB    = document.getElementById('inclBounds').value === 'yes';
+        const mode     = document.getElementById('outputMode').value;
+        const yearCol  = document.getElementById('yearCol').value;
+        const monthCol = document.getElementById('monthCol').value;
+        const cols     = getOutputCols(suffix, inclB, mode, yearCol, monthCol);
+        const data = processedData.map(r => { const o={}; cols.forEach(c=>{o[c]=r[c]!==undefined?r[c]:null;}); return o; });
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Winsorized');
+        XLSX.writeFile(wb, fileName.replace(/\.[^/.]+$/,'') + '_winsorized.xlsx');
+        showAlert('Excel downloaded!', 'success');
+
+    } else if (type === 'summary') {
+        const data = summaryData.map(s => ({
+            Variable: s.col,
+            Total_Month_Observations: s.total,
+            Outlier_Months: s.outliers,
+            Clean_Months: s.nonOutliers,
+            Outlier_Pct: s.total ? ((s.outliers/s.total)*100).toFixed(2)+'%' : '0%',
+            Min_Original: s.origVals.length ? Math.min(...s.origVals) : '',
+            Max_Original: s.origVals.length ? Math.max(...s.origVals) : '',
+            Mean_Original: s.origVals.length ? (s.origVals.reduce((a,b)=>a+b,0)/s.origVals.length).toFixed(3) : '',
+            Mean_Winsorized: s.winVals.length ? (s.winVals.reduce((a,b)=>a+b,0)/s.winVals.length).toFixed(3) : '',
+            Group_Year_Combinations: s.groupYearCount,
+            Group_By_Cols: chosenGroupCols.join(', ') || '(none)'
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+        XLSX.writeFile(wb, fileName.replace(/\.[^/.]+$/,'') + '_outlier_summary.xlsx');
+        showAlert('Summary Excel downloaded!', 'success');
+
+    } else if (type === 'monthly') {
+        const MNAMES = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+        const rows = [];
+        for (const col of chosenTargetCols) {
+            const mb = monthlyBreakdown[col] || {};
+            for (let m = 1; m <= 12; m++) {
+                const d = mb[String(m)] || { out: 0, ok: 0 };
+                const tot = d.out + d.ok;
+                rows.push({
+                    Variable: col,
+                    Month_Number: m,
+                    Month_Name: MNAMES[m-1],
+                    Outlier_Count: d.out,
+                    Clean_Count: d.ok,
+                    Total: tot,
+                    Outlier_Pct: tot > 0 ? ((d.out/tot)*100).toFixed(2)+'%' : '0%'
+                });
+            }
+        }
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Monthly Breakdown');
+        XLSX.writeFile(wb, fileName.replace(/\.[^/.]+$/,'') + '_monthly_breakdown.xlsx');
+        showAlert('Monthly breakdown downloaded!', 'success');
+    }
+}
+
+function dlCSV() {
+    const suffix   = document.getElementById('winSuffix').value || '_winsorized';
+    const inclB    = document.getElementById('inclBounds').value === 'yes';
+    const mode     = document.getElementById('outputMode').value;
+    const yearCol  = document.getElementById('yearCol').value;
+    const monthCol = document.getElementById('monthCol').value;
+    const cols     = getOutputCols(suffix, inclB, mode, yearCol, monthCol);
+    const data = processedData.map(r => { const o={}; cols.forEach(c=>{o[c]=r[c]!==undefined?r[c]:''}); return o; });
+    const blob = new Blob([Papa.unparse(data)], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = fileName.replace(/\.[^/.]+$/,'') + '_winsorized.csv'; a.click();
+    showAlert('CSV downloaded!', 'success');
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function showTab(id, btn) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+}
+
+function showAlert(msg, type) {
+    const d = document.createElement('div');
+    d.className = `alert alert-${type}`; d.innerHTML = msg;
+    const c = document.getElementById('alertContainer'); c.innerHTML = ''; c.appendChild(d);
+    setTimeout(() => d.remove(), 7000);
+}
+
+function backToConfig() {
+    document.getElementById('resultsCard').classList.add('hidden');
+    document.getElementById('configCard').classList.remove('hidden');
+}
+
+function resetAll() {
+    rawData=[]; processedData=[]; summaryData=[]; monthlyBreakdown={};
+    availableColumns=[]; numericColumns=[]; fileName='';
+    chosenGroupCols=[]; chosenTargetCols=[];
+    ['uploadCard','configCard','processingCard','resultsCard'].forEach(id =>
+        document.getElementById(id).classList.toggle('hidden', id !== 'uploadCard'));
+    document.getElementById('dataFileInput').value = '';
+    document.getElementById('dataFileName').textContent = '';
+    document.getElementById('alertContainer').innerHTML = '';
+}
+</script>
+</body>
+</html>
